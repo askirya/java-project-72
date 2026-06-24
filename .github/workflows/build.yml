@@ -25,6 +25,9 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x app/gradlew
+
       - name: Build and test
         working-directory: app
         run: ./gradlew clean build jacocoTestReport
