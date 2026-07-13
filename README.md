@@ -7,4 +7,4 @@
 
 ### WEB-Приложение
 
-[https://java-project-72.onrender.com](https://java-project-72.onrender.com)
+[https://java-project-72-we6f.onrender.com](https://java-project-72-we6f.onrender.com)
