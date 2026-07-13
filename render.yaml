@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: java-project-72
+    runtime: docker
+    rootDir: app
+    plan: free

@@ -30,7 +30,7 @@ jobs:
 
       - name: Build and test
         working-directory: app
-        run: ./gradlew clean build jacocoTestReport
+        run: ./gradlew clean build shadowJar jacocoTestReport
 
       - name: Analyze with SonarQube Cloud
         uses: SonarSource/sonarqube-scan-action@v6
