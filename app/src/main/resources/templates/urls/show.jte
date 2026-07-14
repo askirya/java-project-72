@@ -24,5 +24,23 @@
         </tr>
       </tbody>
     </table>
+    <h2>Проверки</h2>
+    <form method="post" action="/urls/${url.getId()}/checks">
+      <input type="submit" value="Запустить проверку">
+    </form>
+    <table class="table table-bordered mt-3" data-test="checks">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Код ответа</th>
+          <th>h1</th>
+          <th>title</th>
+          <th>description</th>
+          <th>Дата создания</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
   `
 )

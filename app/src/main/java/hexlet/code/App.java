@@ -32,7 +32,10 @@ public final class App {
     }
 
     public static Javalin getApp() {
-        var dataSource = getDataSource();
+        return getApp(getDataSource());
+    }
+
+    static Javalin getApp(DataSource dataSource) {
         BaseRepository.setDataSource(dataSource);
         initializeDatabase(dataSource);
 
@@ -57,6 +60,17 @@ public final class App {
 
                 ctx.sessionAttribute("flash", flash);
                 ctx.redirect("/urls/" + url.getId());
+            });
+            config.routes.post("/urls/{id}/checks", ctx -> {
+                var id = ctx.pathParamAsClass("id", Long.class).get();
+                var url = UrlRepository.find(id);
+
+                if (url.isEmpty()) {
+                    ctx.status(404);
+                    return;
+                }
+
+                ctx.redirect("/urls/" + id);
             });
             config.routes.get("/urls", ctx -> {
                 var model = getModelWithFlash(ctx);
@@ -126,7 +140,11 @@ public final class App {
     }
 
     static Javalin start(int port) {
-        var app = getApp();
+        return start(port, getDataSource());
+    }
+
+    static Javalin start(int port, DataSource dataSource) {
+        var app = getApp(dataSource);
 
         app.start(port);
         LOGGER.info("Application started on port {}", port);

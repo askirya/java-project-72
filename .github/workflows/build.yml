@@ -28,9 +28,13 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x app/gradlew
 
-      - name: Build and test
+      - name: Run tests with coverage
         working-directory: app
-        run: ./gradlew clean build shadowJar jacocoTestReport
+        run: ./gradlew clean test jacocoTestReport
+
+      - name: Build application
+        working-directory: app
+        run: ./gradlew build shadowJar
 
       - name: Analyze with SonarQube Cloud
         uses: SonarSource/sonarqube-scan-action@v6

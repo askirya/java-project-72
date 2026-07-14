@@ -1,10 +1,13 @@
 package hexlet.code;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import hexlet.code.repository.BaseRepository;
+import io.javalin.Javalin;
 import org.junit.jupiter.api.Test;
 
-import java.net.URI;
 import java.net.CookieManager;
+import java.net.URI;
 import java.net.http.HttpClient.Redirect;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -24,7 +27,8 @@ class AppTest {
 
     @Test
     void rootReturnsHelloWorld() throws Exception {
-        var app = App.start(0);
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
 
         try {
             var client = HttpClient.newHttpClient();
@@ -40,12 +44,14 @@ class AppTest {
             assertTrue(response.body().contains("name=\"url\""));
         } finally {
             app.stop();
+            dataSource.close();
         }
     }
 
     @Test
     void appCreatesAndShowsUrl() throws Exception {
-        var app = App.start(0);
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
 
         try {
             var client = HttpClient.newBuilder()
@@ -63,6 +69,18 @@ class AppTest {
             assertTrue(response.body().contains("Страница успешно добавлена"));
             assertTrue(response.body().contains("<table class=\"table table-bordered\" data-test=\"url\">"));
             assertTrue(response.body().contains("<td>https://example.com</td>"));
+            assertTrue(response.body().contains("<form method=\"post\" action=\"/urls/1/checks\">"));
+            assertTrue(response.body().contains("value=\"Запустить проверку\""));
+            assertTrue(response.body().contains("data-test=\"checks\""));
+            assertEquals("/urls/1", response.uri().getPath());
+
+            try (var connection = dataSource.getConnection();
+                 var statement = connection.createStatement();
+                 var resultSet = statement.executeQuery("SELECT id, name FROM urls")) {
+                resultSet.next();
+                assertEquals(1, resultSet.getLong("id"));
+                assertEquals("https://example.com", resultSet.getString("name"));
+            }
 
             var listRequest = HttpRequest.newBuilder()
                     .uri(URI.create("http://localhost:" + app.port() + "/urls"))
@@ -75,12 +93,14 @@ class AppTest {
             assertTrue(listResponse.body().contains("<td><a href=\"/urls/1\">https://example.com</a></td>"));
         } finally {
             app.stop();
+            dataSource.close();
         }
     }
 
     @Test
     void appDoesNotCreateDuplicateUrl() throws Exception {
-        var app = App.start(0);
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
 
         try {
             var client = HttpClient.newBuilder()
@@ -104,21 +124,25 @@ class AppTest {
 
             assertEquals(200, response.statusCode());
             assertTrue(response.body().contains("Страница уже существует"));
+            assertEquals("/urls/1", response.uri().getPath());
 
-            try (var connection = BaseRepository.getDataSource().getConnection();
+            try (var connection = dataSource.getConnection();
                  var statement = connection.createStatement();
-                 var resultSet = statement.executeQuery("SELECT COUNT(*) FROM urls")) {
+                 var resultSet = statement.executeQuery("SELECT COUNT(*), MAX(name) FROM urls")) {
                 resultSet.next();
                 assertEquals(1, resultSet.getInt(1));
+                assertEquals("https://example.com", resultSet.getString(2));
             }
         } finally {
             app.stop();
+            dataSource.close();
         }
     }
 
     @Test
     void appReturnsValidationErrorForInvalidUrl() throws Exception {
-        var app = App.start(0);
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
 
         try {
             var client = HttpClient.newHttpClient();
@@ -133,21 +157,144 @@ class AppTest {
             assertTrue(response.body().contains("Некорректный URL"));
         } finally {
             app.stop();
+            dataSource.close();
+        }
+    }
+
+    @Test
+    void appReturnsValidationErrorForUrlWithoutHost() throws Exception {
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
+
+        try {
+            var client = HttpClient.newHttpClient();
+            var request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls"))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString("url=mailto:test@example.com"))
+                    .build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(422, response.statusCode());
+            assertTrue(response.body().contains("Некорректный URL"));
+        } finally {
+            app.stop();
+            dataSource.close();
+        }
+    }
+
+    @Test
+    void appKeepsUrlPort() throws Exception {
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
+
+        try {
+            var client = HttpClient.newBuilder()
+                    .cookieHandler(new CookieManager())
+                    .followRedirects(Redirect.NORMAL)
+                    .build();
+            var request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls"))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString("url=https://example.com:8080/path"))
+                    .build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("<td>https://example.com:8080</td>"));
+        } finally {
+            app.stop();
+            dataSource.close();
+        }
+    }
+
+    @Test
+    void appReturnsNotFoundForMissingUrl() throws Exception {
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
+
+        try {
+            var client = HttpClient.newHttpClient();
+            var request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls/999"))
+                    .GET()
+                    .build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(404, response.statusCode());
+        } finally {
+            app.stop();
+            dataSource.close();
+        }
+    }
+
+    @Test
+    void appRedirectsFromCheckHandler() throws Exception {
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
+
+        try {
+            var client = HttpClient.newBuilder()
+                    .cookieHandler(new CookieManager())
+                    .followRedirects(Redirect.NEVER)
+                    .build();
+            var createRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls"))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString("url=https://example.com"))
+                    .build();
+            client.send(createRequest, HttpResponse.BodyHandlers.ofString());
+
+            var checkRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls/1/checks"))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+            var response = client.send(checkRequest, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(302, response.statusCode());
+            assertEquals("/urls/1", response.headers().firstValue("Location").orElse(""));
+        } finally {
+            app.stop();
+            dataSource.close();
+        }
+    }
+
+    @Test
+    void appReturnsNotFoundFromCheckHandlerForMissingUrl() throws Exception {
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
+
+        try {
+            var client = HttpClient.newHttpClient();
+            var request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls/999/checks"))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(404, response.statusCode());
+        } finally {
+            app.stop();
+            dataSource.close();
         }
     }
 
     @Test
     void appInitializesDatabase() throws Exception {
-        App.getApp();
+        var dataSource = getTestDataSource();
+        App.getApp(dataSource);
 
-        var dataSource = BaseRepository.getDataSource();
-        assertNotNull(dataSource);
+        try {
+            assertNotNull(BaseRepository.getDataSource());
 
-        try (var connection = dataSource.getConnection();
-             var statement = connection.createStatement();
-             var resultSet = statement.executeQuery("SELECT COUNT(*) FROM urls")) {
-            resultSet.next();
-            assertEquals(0, resultSet.getInt(1));
+            try (var connection = dataSource.getConnection();
+                 var statement = connection.createStatement();
+                 var resultSet = statement.executeQuery("SELECT COUNT(*) FROM urls")) {
+                resultSet.next();
+                assertEquals(0, resultSet.getInt(1));
+            }
+        } finally {
+            dataSource.close();
         }
     }
 
@@ -181,12 +328,26 @@ class AppTest {
 
     @Test
     void initializeDatabaseThrowsWhenSchemaIsMissing() {
-        App.getApp();
+        var dataSource = getTestDataSource();
 
-        var dataSource = BaseRepository.getDataSource();
-        var exception = assertThrows(RuntimeException.class, () ->
-                App.initializeDatabase(dataSource, "missing-schema.sql"));
+        try {
+            var exception = assertThrows(RuntimeException.class, () ->
+                    App.initializeDatabase(dataSource, "missing-schema.sql"));
 
-        assertEquals("Failed to read database schema", exception.getMessage());
+            assertEquals("Failed to read database schema", exception.getMessage());
+        } finally {
+            dataSource.close();
+        }
+    }
+
+    private static Javalin startTestApp(HikariDataSource dataSource) {
+        return App.start(0, dataSource);
+    }
+
+    private static HikariDataSource getTestDataSource() {
+        var config = new HikariConfig();
+        config.setJdbcUrl("jdbc:h2:mem:test" + System.nanoTime() + ";DB_CLOSE_DELAY=-1");
+
+        return new HikariDataSource(config);
     }
 }
