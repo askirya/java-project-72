@@ -6,15 +6,19 @@ import gg.jte.ContentType;
 import gg.jte.TemplateEngine;
 import gg.jte.resolve.ResourceCodeResolver;
 import hexlet.code.repository.BaseRepository;
+import hexlet.code.repository.UrlRepository;
 import io.javalin.Javalin;
+import io.javalin.http.Context;
 import io.javalin.rendering.template.JavalinJte;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.Map;
 import javax.sql.DataSource;
 
@@ -35,8 +39,78 @@ public final class App {
         return Javalin.create(config -> {
             config.bundledPlugins.enableDevLogging();
             config.fileRenderer(new JavalinJte(createTemplateEngine()));
-            config.routes.get("/", ctx -> ctx.render("index.jte"));
+            config.routes.get("/", ctx -> ctx.render("index.jte", getModelWithFlash(ctx)));
+            config.routes.post("/urls", ctx -> {
+                var inputUrl = ctx.formParam("url");
+                var urlName = normalizeUrl(inputUrl);
+
+                if (urlName == null) {
+                    ctx.status(422).render("index.jte", Map.of(
+                            "flash", "Некорректный URL"
+                    ));
+                    return;
+                }
+
+                var existingUrl = UrlRepository.findByName(urlName);
+                var url = existingUrl.orElseGet(() -> UrlRepository.save(urlName));
+                var flash = existingUrl.isPresent() ? "Страница уже существует" : "Страница успешно добавлена";
+
+                ctx.sessionAttribute("flash", flash);
+                ctx.redirect("/urls/" + url.getId());
+            });
+            config.routes.get("/urls", ctx -> {
+                var model = getModelWithFlash(ctx);
+                model.put("urls", UrlRepository.findAll());
+                ctx.render("urls/index.jte", model);
+            });
+            config.routes.get("/urls/{id}", ctx -> {
+                var id = ctx.pathParamAsClass("id", Long.class).get();
+                var url = UrlRepository.find(id);
+
+                if (url.isEmpty()) {
+                    ctx.status(404);
+                    return;
+                }
+
+                var model = getModelWithFlash(ctx);
+                model.put("url", url.get());
+                ctx.render("urls/show.jte", model);
+            });
         });
+    }
+
+    private static String normalizeUrl(String inputUrl) {
+        try {
+            var parsedUrl = URI.create(inputUrl).toURL();
+            if (parsedUrl.getProtocol() == null || parsedUrl.getHost() == null || parsedUrl.getHost().isBlank()) {
+                return null;
+            }
+
+            var port = parsedUrl.getPort();
+            var portPart = port == -1 ? "" : ":" + port;
+
+            return "%s://%s%s".formatted(parsedUrl.getProtocol(), parsedUrl.getHost(), portPart);
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    private static Map<String, Object> getModelWithFlash(Context ctx) {
+        var model = new HashMap<String, Object>();
+        var flash = getFlash(ctx);
+
+        if (flash != null && !flash.isBlank()) {
+            model.put("flash", flash);
+        }
+
+        return model;
+    }
+
+    private static String getFlash(Context ctx) {
+        var flash = ctx.<String>sessionAttribute("flash");
+        ctx.sessionAttribute("flash", null);
+
+        return flash;
     }
 
     private static TemplateEngine createTemplateEngine() {

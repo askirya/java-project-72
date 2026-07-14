@@ -1,5 +1,8 @@
+@param String flash = null
+
 @template.layout(
   title = "Анализатор страниц",
+  flash = flash,
   content = @`
     <div class="row">
       <div class="col-12 col-md-10 col-lg-8 mx-auto border rounded-3 bg-light p-5">
