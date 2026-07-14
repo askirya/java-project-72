@@ -12,6 +12,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AppTest {
     @Test
@@ -32,7 +33,9 @@ class AppTest {
             var response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
             assertEquals(200, response.statusCode());
-            assertEquals("Hello World", response.body());
+            assertTrue(response.body().contains("<h1 class=\"display-3\">Анализатор страниц</h1>"));
+            assertTrue(response.body().contains("<form action=\"/urls\" method=\"post\" class=\"row\">"));
+            assertTrue(response.body().contains("name=\"url\""));
         } finally {
             app.stop();
         }
