@@ -6,10 +6,13 @@ import gg.jte.ContentType;
 import gg.jte.TemplateEngine;
 import gg.jte.resolve.ResourceCodeResolver;
 import hexlet.code.repository.BaseRepository;
+import hexlet.code.repository.UrlCheckRepository;
 import hexlet.code.repository.UrlRepository;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.rendering.template.JavalinJte;
+import kong.unirest.core.Unirest;
+import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,7 +52,8 @@ public final class App {
 
                 if (urlName == null) {
                     ctx.status(422).render("index.jte", Map.of(
-                            "flash", "Некорректный URL"
+                            "flash", "Некорректный URL",
+                            "flashType", "danger"
                     ));
                     return;
                 }
@@ -70,6 +74,32 @@ public final class App {
                     return;
                 }
 
+                try {
+                    var response = Unirest.get(url.get().getName()).asString();
+                    var statusCode = response.getStatus();
+
+                    if (statusCode >= 400) {
+                        ctx.sessionAttribute("flash", "Произошла ошибка при проверке");
+                        ctx.redirect("/urls/" + id);
+                        return;
+                    }
+
+                    var document = Jsoup.parse(response.getBody());
+                    var h1 = document.selectFirst("h1");
+                    var description = document.selectFirst("meta[name=description]");
+
+                    UrlCheckRepository.save(
+                            id,
+                            statusCode,
+                            h1 == null ? "" : h1.text(),
+                            document.title(),
+                            description == null ? "" : description.attr("content")
+                    );
+                    ctx.sessionAttribute("flash", "Страница успешно проверена");
+                } catch (Exception exception) {
+                    ctx.sessionAttribute("flash", "Произошла ошибка при проверке");
+                }
+
                 ctx.redirect("/urls/" + id);
             });
             config.routes.get("/urls", ctx -> {
@@ -88,6 +118,7 @@ public final class App {
 
                 var model = getModelWithFlash(ctx);
                 model.put("url", url.get());
+                model.put("checks", UrlCheckRepository.findByUrlId(id));
                 ctx.render("urls/show.jte", model);
             });
         });
@@ -115,6 +146,7 @@ public final class App {
 
         if (flash != null && !flash.isBlank()) {
             model.put("flash", flash);
+            model.put("flashType", flash.contains("ошибка") || flash.contains("Некорректный") ? "danger" : "success");
         }
 
         return model;

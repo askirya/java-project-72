@@ -3,10 +3,12 @@
 
 @param List<Url> urls
 @param String flash = null
+@param String flashType = "info"
 
 @template.layout(
   title = "Сайты",
   flash = flash,
+  flashType = flashType,
   content = @`
     <h1>Сайты</h1>
     <table class="table table-bordered" data-test="urls">
@@ -14,7 +16,7 @@
         <tr>
           <th>ID</th>
           <th>Имя</th>
-          <th>Дата создания</th>
+          <th>Последняя проверка</th>
           <th>Код ответа</th>
         </tr>
       </thead>
@@ -23,8 +25,8 @@
           <tr>
             <td>${url.getId()}</td>
             <td><a href="/urls/${url.getId()}">${url.getName()}</a></td>
-            <td>${url.getCreatedAt().toLocalDateTime().toLocalDate().toString()}</td>
-            <td></td>
+            <td>${url.getLastCheckCreatedAt() == null ? "" : url.getLastCheckCreatedAt().toLocalDateTime().toLocalDate().toString()}</td>
+            <td>${url.getLastStatusCode() == null ? "" : url.getLastStatusCode().toString()}</td>
           </tr>
         @endfor
       </tbody>

@@ -76,7 +76,21 @@ public class UrlRepository extends BaseRepository {
     }
 
     public static List<Url> findAll() {
-        var sql = "SELECT id, name, created_at FROM urls ORDER BY created_at DESC";
+        var sql = """
+                SELECT urls.id, urls.name, urls.created_at, checks.created_at AS last_check_created_at,
+                       checks.status_code AS last_status_code
+                FROM urls
+                LEFT JOIN (
+                    SELECT url_checks.*
+                    FROM url_checks
+                    INNER JOIN (
+                        SELECT url_id, MAX(id) AS id
+                        FROM url_checks
+                        GROUP BY url_id
+                    ) latest_checks ON latest_checks.id = url_checks.id
+                ) checks ON checks.url_id = urls.id
+                ORDER BY urls.created_at DESC
+                """;
         var urls = new ArrayList<Url>();
 
         try (var connection = dataSource.getConnection();
@@ -86,7 +100,9 @@ public class UrlRepository extends BaseRepository {
                 urls.add(new Url(
                         resultSet.getLong("id"),
                         resultSet.getString("name"),
-                        resultSet.getTimestamp("created_at")
+                        resultSet.getTimestamp("created_at"),
+                        resultSet.getTimestamp("last_check_created_at"),
+                        resultSet.getObject("last_status_code", Integer.class)
                 ));
             }
 

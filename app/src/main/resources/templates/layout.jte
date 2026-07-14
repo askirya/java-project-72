@@ -3,6 +3,7 @@
 @param String title
 @param Content content
 @param String flash = null
+@param String flashType = "info"
 
 <!doctype html>
 <html lang="ru">
@@ -26,7 +27,7 @@
     </nav>
     <main class="container flex-grow-1 py-4">
       @if (flash != null && !flash.isBlank())
-        <div class="alert alert-info" role="alert">${flash}</div>
+        <div class="alert alert-${flashType}" role="alert">${flash}</div>
       @endif
       ${content}
     </main>

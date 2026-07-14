@@ -2,8 +2,14 @@ package hexlet.code;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import hexlet.code.model.Url;
+import hexlet.code.model.UrlCheck;
 import hexlet.code.repository.BaseRepository;
 import io.javalin.Javalin;
+import mockwebserver3.MockResponse;
+import mockwebserver3.MockWebServer;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.net.CookieManager;
@@ -12,6 +18,7 @@ import java.net.http.HttpClient.Redirect;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Timestamp;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,9 +27,61 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AppTest {
+    private static MockWebServer mockServer;
+
+    @BeforeAll
+    static void startMockServer() throws Exception {
+        mockServer = new MockWebServer();
+        mockServer.start();
+    }
+
+    @AfterAll
+    static void stopMockServer() throws Exception {
+        mockServer.close();
+    }
+
     @Test
     void appHasPackage() {
         assertEquals("hexlet.code", App.class.getPackageName());
+    }
+
+    @Test
+    void modelsStoreFields() {
+        var now = new Timestamp(System.currentTimeMillis());
+        var url = new Url();
+        url.setId(1L);
+        url.setName("https://example.com");
+        url.setCreatedAt(now);
+        url.setLastCheckCreatedAt(now);
+        url.setLastStatusCode(200);
+
+        assertEquals(1L, url.getId());
+        assertEquals("https://example.com", url.getName());
+        assertEquals(now, url.getCreatedAt());
+        assertEquals(now, url.getLastCheckCreatedAt());
+        assertEquals(200, url.getLastStatusCode());
+
+        var longValue = "a".repeat(201);
+        var preview = "a".repeat(200) + "...";
+        var check = new UrlCheck();
+        check.setId(2L);
+        check.setUrlId(1L);
+        check.setStatusCode(200);
+        check.setH1(longValue);
+        check.setTitle(longValue);
+        check.setDescription(longValue);
+        check.setCreatedAt(now);
+
+        assertEquals(2L, check.getId());
+        assertEquals(1L, check.getUrlId());
+        assertEquals(200, check.getStatusCode());
+        assertEquals(longValue, check.getH1());
+        assertEquals(longValue, check.getTitle());
+        assertEquals(longValue, check.getDescription());
+        assertEquals(now, check.getCreatedAt());
+        assertEquals(preview, check.getH1Preview());
+        assertEquals(preview, check.getTitlePreview());
+        assertEquals(preview, check.getDescriptionPreview());
     }
 
     @Test
@@ -234,6 +293,10 @@ class AppTest {
         var app = startTestApp(dataSource);
 
         try {
+            mockServer.enqueue(new MockResponse.Builder()
+                    .code(200)
+                    .body("<html><head><title>Checked page</title></head><body><h1>Hello</h1></body></html>")
+                    .build());
             var client = HttpClient.newBuilder()
                     .cookieHandler(new CookieManager())
                     .followRedirects(Redirect.NEVER)
@@ -241,7 +304,7 @@ class AppTest {
             var createRequest = HttpRequest.newBuilder()
                     .uri(URI.create("http://localhost:" + app.port() + "/urls"))
                     .header("Content-Type", "application/x-www-form-urlencoded")
-                    .POST(HttpRequest.BodyPublishers.ofString("url=https://example.com"))
+                    .POST(HttpRequest.BodyPublishers.ofString("url=" + mockServer.url("/").toString()))
                     .build();
             client.send(createRequest, HttpResponse.BodyHandlers.ofString());
 
@@ -253,6 +316,167 @@ class AppTest {
 
             assertEquals(302, response.statusCode());
             assertEquals("/urls/1", response.headers().firstValue("Location").orElse(""));
+        } finally {
+            app.stop();
+            dataSource.close();
+        }
+    }
+
+    @Test
+    void appCreatesUrlCheck() throws Exception {
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
+        var description = "Statements of great people";
+
+        try {
+            mockServer.enqueue(new MockResponse.Builder()
+                    .code(200)
+                    .body("""
+                            <html>
+                              <head>
+                                <title>Awesome page</title>
+                                <meta name="description" content="%s">
+                              </head>
+                              <body>
+                                <h1>Do not expect a miracle, miracles yourself!</h1>
+                              </body>
+                            </html>
+                            """.formatted(description))
+                    .build());
+            var client = HttpClient.newBuilder()
+                    .cookieHandler(new CookieManager())
+                    .followRedirects(Redirect.NORMAL)
+                    .build();
+            var createRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls"))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString("url=" + mockServer.url("/success").toString()))
+                    .build();
+            client.send(createRequest, HttpResponse.BodyHandlers.ofString());
+
+            var checkRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls/1/checks"))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+            var response = client.send(checkRequest, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("Страница успешно проверена"));
+            assertTrue(response.body().contains("<td>200</td>"));
+            assertTrue(response.body().contains("<td>Do not expect a miracle, miracles yourself!</td>"));
+            assertTrue(response.body().contains("<td>Awesome page</td>"));
+            assertTrue(response.body().contains("<td>" + description + "</td>"));
+
+            try (var connection = dataSource.getConnection();
+                 var statement = connection.createStatement();
+                 var resultSet = statement.executeQuery("""
+                         SELECT status_code, h1, title, description, url_id
+                         FROM url_checks
+                         """)) {
+                resultSet.next();
+                assertEquals(200, resultSet.getInt("status_code"));
+                assertEquals("Do not expect a miracle, miracles yourself!", resultSet.getString("h1"));
+                assertEquals("Awesome page", resultSet.getString("title"));
+                assertEquals(description, resultSet.getString("description"));
+                assertEquals(1, resultSet.getLong("url_id"));
+            }
+
+            var listRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls"))
+                    .GET()
+                    .build();
+            var listResponse = client.send(listRequest, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(200, listResponse.statusCode());
+            assertTrue(listResponse.body().contains("<th>Последняя проверка</th>"));
+            assertTrue(listResponse.body().contains("<td>200</td>"));
+        } finally {
+            app.stop();
+            dataSource.close();
+        }
+    }
+
+    @Test
+    void appTruncatesLongCheckValues() throws Exception {
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
+        var longValue = "a".repeat(201);
+        var preview = "a".repeat(200) + "...";
+
+        try {
+            mockServer.enqueue(new MockResponse.Builder()
+                    .code(200)
+                    .body("""
+                            <html>
+                              <head>
+                                <title>%s</title>
+                                <meta name="description" content="%s">
+                              </head>
+                              <body><h1>%s</h1></body>
+                            </html>
+                            """.formatted(longValue, longValue, longValue))
+                    .build());
+            var client = HttpClient.newBuilder()
+                    .cookieHandler(new CookieManager())
+                    .followRedirects(Redirect.NORMAL)
+                    .build();
+            var createRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls"))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString("url=" + mockServer.url("/long").toString()))
+                    .build();
+            client.send(createRequest, HttpResponse.BodyHandlers.ofString());
+
+            var checkRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls/1/checks"))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+            var response = client.send(checkRequest, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("<td>" + preview + "</td>"));
+        } finally {
+            app.stop();
+            dataSource.close();
+        }
+    }
+
+    @Test
+    void appDoesNotCreateUrlCheckWhenRequestFails() throws Exception {
+        var dataSource = getTestDataSource();
+        var app = startTestApp(dataSource);
+
+        try {
+            mockServer.enqueue(new MockResponse.Builder()
+                    .code(500)
+                    .body("Server error")
+                    .build());
+            var client = HttpClient.newBuilder()
+                    .cookieHandler(new CookieManager())
+                    .followRedirects(Redirect.NORMAL)
+                    .build();
+            var createRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls"))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString("url=" + mockServer.url("/wrong").toString()))
+                    .build();
+            client.send(createRequest, HttpResponse.BodyHandlers.ofString());
+
+            var checkRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:" + app.port() + "/urls/1/checks"))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+            var response = client.send(checkRequest, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("Произошла ошибка при проверке"));
+
+            try (var connection = dataSource.getConnection();
+                 var statement = connection.createStatement();
+                 var resultSet = statement.executeQuery("SELECT COUNT(*) FROM url_checks")) {
+                resultSet.next();
+                assertEquals(0, resultSet.getInt(1));
+            }
         } finally {
             app.stop();
             dataSource.close();
