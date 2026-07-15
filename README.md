@@ -8,4 +8,4 @@
 
 ### WEB-Приложение
 
-[https://java-project-72.onrender.com](https://java-project-72.onrender.com)
+[https://java-projy-72.onrender.com](https://java-projy-72.onrender.com)
