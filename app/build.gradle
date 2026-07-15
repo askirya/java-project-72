@@ -68,6 +68,11 @@ jacocoTestReport {
     }
 }
 
+tasks.named('jar') {
+    dependsOn precompileJte
+    from("$buildDir/jte-classes")
+}
+
 tasks.named('shadowJar') {
     dependsOn precompileJte
     from("$buildDir/jte-classes")
