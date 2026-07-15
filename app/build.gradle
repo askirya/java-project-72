@@ -3,6 +3,7 @@ plugins {
     id 'application'
     id 'jacoco'
     id 'com.gradleup.shadow' version '9.5.1'
+    id 'gg.jte.gradle' version '3.2.4'
 }
 
 group = 'hexlet.code'
@@ -41,8 +42,21 @@ application {
     mainClass = 'hexlet.code.App'
 }
 
+jte {
+    precompile()
+    sourceDirectory = file('src/main/resources/templates').toPath()
+    targetDirectory = file("$buildDir/jte-classes").toPath()
+}
+
+tasks.named('run') {
+    dependsOn precompileJte
+    classpath += files("$buildDir/jte-classes")
+}
+
 test {
     useJUnitPlatform()
+    dependsOn precompileJte
+    classpath += files("$buildDir/jte-classes")
     finalizedBy jacocoTestReport
 }
 
@@ -55,6 +69,8 @@ jacocoTestReport {
 }
 
 tasks.named('shadowJar') {
+    dependsOn precompileJte
+    from("$buildDir/jte-classes")
     archiveClassifier.set('all')
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
     mergeServiceFiles()
