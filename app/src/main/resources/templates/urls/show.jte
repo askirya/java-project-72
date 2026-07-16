@@ -1,6 +1,7 @@
 @import hexlet.code.model.Url
 @import hexlet.code.model.UrlCheck
 @import java.util.List
+@import java.time.format.DateTimeFormatter
 
 @param Url url
 @param List<UrlCheck> checks
@@ -25,7 +26,7 @@
         </tr>
         <tr>
           <td>Дата создания</td>
-          <td>${url.getCreatedAt().toLocalDateTime().toLocalDate().toString()}</td>
+          <td>${url.getCreatedAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))}</td>
         </tr>
       </tbody>
     </table>
@@ -52,7 +53,7 @@
             <td>${check.getH1Preview()}</td>
             <td>${check.getTitlePreview()}</td>
             <td>${check.getDescriptionPreview()}</td>
-            <td>${check.getCreatedAt().toLocalDateTime().toLocalDate().toString()}</td>
+            <td>${check.getCreatedAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))}</td>
           </tr>
         @endfor
       </tbody>

@@ -5,6 +5,8 @@ import com.zaxxer.hikari.HikariDataSource;
 import hexlet.code.model.Url;
 import hexlet.code.model.UrlCheck;
 import hexlet.code.repository.BaseRepository;
+import hexlet.code.repository.UrlCheckRepository;
+import hexlet.code.repository.UrlRepository;
 import io.javalin.Javalin;
 import mockwebserver3.MockResponse;
 import mockwebserver3.MockWebServer;
@@ -18,7 +20,7 @@ import java.net.http.HttpClient.Redirect;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,19 +49,15 @@ class AppTest {
 
     @Test
     void modelsStoreFields() {
-        var now = new Timestamp(System.currentTimeMillis());
+        var now = LocalDateTime.now();
         var url = new Url();
         url.setId(1L);
         url.setName("https://example.com");
         url.setCreatedAt(now);
-        url.setLastCheckCreatedAt(now);
-        url.setLastStatusCode(200);
 
         assertEquals(1L, url.getId());
         assertEquals("https://example.com", url.getName());
         assertEquals(now, url.getCreatedAt());
-        assertEquals(now, url.getLastCheckCreatedAt());
-        assertEquals(200, url.getLastStatusCode());
 
         var longValue = "a".repeat(201);
         var preview = "a".repeat(200) + "...";
@@ -133,13 +131,9 @@ class AppTest {
             assertTrue(response.body().contains("data-test=\"checks\""));
             assertEquals("/urls/1", response.uri().getPath());
 
-            try (var connection = dataSource.getConnection();
-                 var statement = connection.createStatement();
-                 var resultSet = statement.executeQuery("SELECT id, name FROM urls")) {
-                resultSet.next();
-                assertEquals(1, resultSet.getLong("id"));
-                assertEquals("https://example.com", resultSet.getString("name"));
-            }
+            var url = UrlRepository.findByName("https://example.com").orElseThrow();
+            assertEquals(1L, url.getId());
+            assertEquals("https://example.com", url.getName());
 
             var listRequest = HttpRequest.newBuilder()
                     .uri(URI.create("http://localhost:" + app.port() + "/urls"))
@@ -185,13 +179,9 @@ class AppTest {
             assertTrue(response.body().contains("Страница уже существует"));
             assertEquals("/urls/1", response.uri().getPath());
 
-            try (var connection = dataSource.getConnection();
-                 var statement = connection.createStatement();
-                 var resultSet = statement.executeQuery("SELECT COUNT(*), MAX(name) FROM urls")) {
-                resultSet.next();
-                assertEquals(1, resultSet.getInt(1));
-                assertEquals("https://example.com", resultSet.getString(2));
-            }
+            var urls = UrlRepository.findAll();
+            assertEquals(1, urls.size());
+            assertEquals("https://example.com", urls.get(0).getName());
         } finally {
             app.stop();
             dataSource.close();
@@ -367,19 +357,13 @@ class AppTest {
             assertTrue(response.body().contains("<td>Awesome page</td>"));
             assertTrue(response.body().contains("<td>" + description + "</td>"));
 
-            try (var connection = dataSource.getConnection();
-                 var statement = connection.createStatement();
-                 var resultSet = statement.executeQuery("""
-                         SELECT status_code, h1, title, description, url_id
-                         FROM url_checks
-                         """)) {
-                resultSet.next();
-                assertEquals(200, resultSet.getInt("status_code"));
-                assertEquals("Do not expect a miracle, miracles yourself!", resultSet.getString("h1"));
-                assertEquals("Awesome page", resultSet.getString("title"));
-                assertEquals(description, resultSet.getString("description"));
-                assertEquals(1, resultSet.getLong("url_id"));
-            }
+            var checks = UrlCheckRepository.findByUrlId(1L);
+            assertEquals(1, checks.size());
+            assertEquals(200, checks.get(0).getStatusCode());
+            assertEquals("Do not expect a miracle, miracles yourself!", checks.get(0).getH1());
+            assertEquals("Awesome page", checks.get(0).getTitle());
+            assertEquals(description, checks.get(0).getDescription());
+            assertEquals(1L, checks.get(0).getUrlId());
 
             var listRequest = HttpRequest.newBuilder()
                     .uri(URI.create("http://localhost:" + app.port() + "/urls"))
@@ -470,13 +454,7 @@ class AppTest {
 
             assertEquals(200, response.statusCode());
             assertTrue(response.body().contains("Произошла ошибка при проверке"));
-
-            try (var connection = dataSource.getConnection();
-                 var statement = connection.createStatement();
-                 var resultSet = statement.executeQuery("SELECT COUNT(*) FROM url_checks")) {
-                resultSet.next();
-                assertEquals(0, resultSet.getInt(1));
-            }
+            assertTrue(UrlCheckRepository.findByUrlId(1L).isEmpty());
         } finally {
             app.stop();
             dataSource.close();
@@ -510,13 +488,7 @@ class AppTest {
 
         try {
             assertNotNull(BaseRepository.getDataSource());
-
-            try (var connection = dataSource.getConnection();
-                 var statement = connection.createStatement();
-                 var resultSet = statement.executeQuery("SELECT COUNT(*) FROM urls")) {
-                resultSet.next();
-                assertEquals(0, resultSet.getInt(1));
-            }
+            assertTrue(UrlRepository.findAll().isEmpty());
         } finally {
             dataSource.close();
         }

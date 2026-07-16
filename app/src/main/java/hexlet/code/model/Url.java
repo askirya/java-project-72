@@ -1,27 +1,23 @@
 package hexlet.code.model;
 
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 public class Url {
     private Long id;
     private String name;
-    private Timestamp createdAt;
-    private Timestamp lastCheckCreatedAt;
-    private Integer lastStatusCode;
+    private LocalDateTime createdAt;
 
     public Url() {
     }
 
-    public Url(Long id, String name, Timestamp createdAt) {
+    public Url(String name) {
+        this.name = name;
+    }
+
+    public Url(Long id, String name, LocalDateTime createdAt) {
         this.id = id;
         this.name = name;
         this.createdAt = createdAt;
-    }
-
-    public Url(Long id, String name, Timestamp createdAt, Timestamp lastCheckCreatedAt, Integer lastStatusCode) {
-        this(id, name, createdAt);
-        this.lastCheckCreatedAt = lastCheckCreatedAt;
-        this.lastStatusCode = lastStatusCode;
     }
 
     public Long getId() {
@@ -40,27 +36,11 @@ public class Url {
         this.name = name;
     }
 
-    public Timestamp getCreatedAt() {
+    public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(Timestamp createdAt) {
+    public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
-    }
-
-    public Timestamp getLastCheckCreatedAt() {
-        return lastCheckCreatedAt;
-    }
-
-    public void setLastCheckCreatedAt(Timestamp lastCheckCreatedAt) {
-        this.lastCheckCreatedAt = lastCheckCreatedAt;
-    }
-
-    public Integer getLastStatusCode() {
-        return lastStatusCode;
-    }
-
-    public void setLastStatusCode(Integer lastStatusCode) {
-        this.lastStatusCode = lastStatusCode;
     }
 }
