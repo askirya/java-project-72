@@ -1,63 +1,37 @@
 package hexlet.code.dto;
 
+import hexlet.code.model.Url;
+
 import java.time.LocalDateTime;
 
 public class UrlDto {
-    private Long id;
-    private String name;
-    private LocalDateTime createdAt;
-    private LocalDateTime lastCheckCreatedAt;
-    private Integer lastStatusCode;
+    private final Url url;
+    private final LocalDateTime lastCheckCreatedAt;
+    private final Integer lastStatusCode;
 
-    public UrlDto() {
-    }
-
-    public UrlDto(Long id, String name, LocalDateTime createdAt,
-                  LocalDateTime lastCheckCreatedAt, Integer lastStatusCode) {
-        this.id = id;
-        this.name = name;
-        this.createdAt = createdAt;
+    public UrlDto(Url url, LocalDateTime lastCheckCreatedAt, Integer lastStatusCode) {
+        this.url = url;
         this.lastCheckCreatedAt = lastCheckCreatedAt;
         this.lastStatusCode = lastStatusCode;
     }
 
-    public Long getId() {
-        return id;
+    public Url getUrl() {
+        return url;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    public Long getId() {
+        return url.getId();
     }
 
     public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+        return url.getName();
     }
 
     public LocalDateTime getLastCheckCreatedAt() {
         return lastCheckCreatedAt;
     }
 
-    public void setLastCheckCreatedAt(LocalDateTime lastCheckCreatedAt) {
-        this.lastCheckCreatedAt = lastCheckCreatedAt;
-    }
-
     public Integer getLastStatusCode() {
         return lastStatusCode;
-    }
-
-    public void setLastStatusCode(Integer lastStatusCode) {
-        this.lastStatusCode = lastStatusCode;
     }
 }

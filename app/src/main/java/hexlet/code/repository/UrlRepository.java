@@ -3,6 +3,8 @@ package hexlet.code.repository;
 import hexlet.code.dto.UrlDto;
 import hexlet.code.model.Url;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -32,45 +34,15 @@ public class UrlRepository extends BaseRepository {
     }
 
     public static Optional<Url> find(Long id) {
-        var sql = "SELECT id, name, created_at FROM urls WHERE id = ?";
-
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, id);
-
-            try (var resultSet = statement.executeQuery()) {
-                if (!resultSet.next()) {
-                    return Optional.empty();
-                }
-
-                return Optional.of(mapUrl(resultSet.getLong("id"),
-                        resultSet.getString("name"),
-                        resultSet.getTimestamp("created_at")));
-            }
-        } catch (SQLException exception) {
-            throw new RuntimeException("Failed to find url", exception);
-        }
+        return findOne("SELECT id, name, created_at FROM urls WHERE id = ?",
+                statement -> statement.setLong(1, id),
+                "Failed to find url");
     }
 
     public static Optional<Url> findByName(String name) {
-        var sql = "SELECT id, name, created_at FROM urls WHERE name = ?";
-
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, name);
-
-            try (var resultSet = statement.executeQuery()) {
-                if (!resultSet.next()) {
-                    return Optional.empty();
-                }
-
-                return Optional.of(mapUrl(resultSet.getLong("id"),
-                        resultSet.getString("name"),
-                        resultSet.getTimestamp("created_at")));
-            }
-        } catch (SQLException exception) {
-            throw new RuntimeException("Failed to find url by name", exception);
-        }
+        return findOne("SELECT id, name, created_at FROM urls WHERE name = ?",
+                statement -> statement.setString(1, name),
+                "Failed to find url by name");
     }
 
     public static List<UrlDto> findAll() {
@@ -96,9 +68,7 @@ public class UrlRepository extends BaseRepository {
              var resultSet = statement.executeQuery()) {
             while (resultSet.next()) {
                 urls.add(new UrlDto(
-                        resultSet.getLong("id"),
-                        resultSet.getString("name"),
-                        toLocalDateTime(resultSet.getTimestamp("created_at")),
+                        mapUrl(resultSet),
                         toLocalDateTime(resultSet.getTimestamp("last_check_created_at")),
                         resultSet.getObject("last_status_code", Integer.class)
                 ));
@@ -110,11 +80,37 @@ public class UrlRepository extends BaseRepository {
         }
     }
 
-    private static Url mapUrl(Long id, String name, Timestamp createdAt) {
-        return new Url(id, name, toLocalDateTime(createdAt));
+    private static Optional<Url> findOne(String sql, SqlConsumer binder, String errorMessage) {
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            binder.accept(statement);
+
+            try (var resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+
+                return Optional.of(mapUrl(resultSet));
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException(errorMessage, exception);
+        }
+    }
+
+    private static Url mapUrl(ResultSet resultSet) throws SQLException {
+        return new Url(
+                resultSet.getLong("id"),
+                resultSet.getString("name"),
+                toLocalDateTime(resultSet.getTimestamp("created_at"))
+        );
     }
 
     private static LocalDateTime toLocalDateTime(Timestamp timestamp) {
         return timestamp == null ? null : timestamp.toLocalDateTime();
+    }
+
+    @FunctionalInterface
+    private interface SqlConsumer {
+        void accept(PreparedStatement statement) throws SQLException;
     }
 }

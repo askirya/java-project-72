@@ -13,6 +13,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 public final class UrlController {
     private UrlController() {
@@ -47,10 +48,9 @@ public final class UrlController {
 
     public static void show(Context ctx) {
         var id = ctx.pathParamAsClass("id", Long.class).get();
-        var url = UrlRepository.find(id);
+        var url = findUrl(ctx, id);
 
         if (url.isEmpty()) {
-            ctx.status(HttpStatus.NOT_FOUND);
             return;
         }
 
@@ -62,10 +62,9 @@ public final class UrlController {
 
     public static void check(Context ctx) {
         var id = ctx.pathParamAsClass("id", Long.class).get();
-        var url = UrlRepository.find(id);
+        var url = findUrl(ctx, id);
 
         if (url.isEmpty()) {
-            ctx.status(HttpStatus.NOT_FOUND);
             return;
         }
 
@@ -74,7 +73,7 @@ public final class UrlController {
             var statusCode = response.getStatus();
 
             if (statusCode >= 400) {
-                ctx.sessionAttribute("flash", "Произошла ошибка при проверке");
+                setCheckErrorFlash(ctx);
                 ctx.redirect("/urls/" + id);
                 return;
             }
@@ -92,7 +91,7 @@ public final class UrlController {
             ));
             ctx.sessionAttribute("flash", "Страница успешно проверена");
         } catch (Exception exception) {
-            ctx.sessionAttribute("flash", "Произошла ошибка при проверке");
+            setCheckErrorFlash(ctx);
         }
 
         ctx.redirect("/urls/" + id);
@@ -108,6 +107,20 @@ public final class UrlController {
         }
 
         return model;
+    }
+
+    private static Optional<Url> findUrl(Context ctx, Long id) {
+        var url = UrlRepository.find(id);
+
+        if (url.isEmpty()) {
+            ctx.status(HttpStatus.NOT_FOUND);
+        }
+
+        return url;
+    }
+
+    private static void setCheckErrorFlash(Context ctx) {
+        ctx.sessionAttribute("flash", "Произошла ошибка при проверке");
     }
 
     private static String getFlash(Context ctx) {

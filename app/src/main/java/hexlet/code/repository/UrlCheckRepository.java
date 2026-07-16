@@ -2,6 +2,7 @@ package hexlet.code.repository;
 
 import hexlet.code.model.UrlCheck;
 
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
@@ -54,15 +55,7 @@ public class UrlCheckRepository extends BaseRepository {
                     return Optional.empty();
                 }
 
-                return Optional.of(new UrlCheck(
-                        resultSet.getLong("id"),
-                        resultSet.getLong("url_id"),
-                        resultSet.getInt("status_code"),
-                        resultSet.getString("h1"),
-                        resultSet.getString("title"),
-                        resultSet.getString("description"),
-                        resultSet.getTimestamp("created_at").toLocalDateTime()
-                ));
+                return Optional.of(mapUrlCheck(resultSet));
             }
         } catch (SQLException exception) {
             throw new RuntimeException("Failed to find url check", exception);
@@ -84,15 +77,7 @@ public class UrlCheckRepository extends BaseRepository {
 
             try (var resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
-                    checks.add(new UrlCheck(
-                            resultSet.getLong("id"),
-                            resultSet.getLong("url_id"),
-                            resultSet.getInt("status_code"),
-                            resultSet.getString("h1"),
-                            resultSet.getString("title"),
-                            resultSet.getString("description"),
-                            resultSet.getTimestamp("created_at").toLocalDateTime()
-                    ));
+                    checks.add(mapUrlCheck(resultSet));
                 }
 
                 return checks;
@@ -100,5 +85,17 @@ public class UrlCheckRepository extends BaseRepository {
         } catch (SQLException exception) {
             throw new RuntimeException("Failed to find url checks", exception);
         }
+    }
+
+    private static UrlCheck mapUrlCheck(ResultSet resultSet) throws SQLException {
+        return new UrlCheck(
+                resultSet.getLong("id"),
+                resultSet.getLong("url_id"),
+                resultSet.getInt("status_code"),
+                resultSet.getString("h1"),
+                resultSet.getString("title"),
+                resultSet.getString("description"),
+                resultSet.getTimestamp("created_at").toLocalDateTime()
+        );
     }
 }
