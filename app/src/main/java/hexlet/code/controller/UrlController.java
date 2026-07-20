@@ -13,7 +13,6 @@ import java.net.URI;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 public final class UrlController {
     private UrlController() {
@@ -21,9 +20,14 @@ public final class UrlController {
 
     public static void create(Context ctx) {
         var inputUrl = ctx.formParam("url");
-        var parsedUrl = parseUrl(inputUrl);
+        URL parsedUrl;
 
-        if (parsedUrl == null) {
+        try {
+            parsedUrl = URI.create(inputUrl).toURL();
+            if (parsedUrl.getHost() == null || parsedUrl.getHost().isBlank()) {
+                throw new IllegalArgumentException("URL host is required");
+            }
+        } catch (Exception exception) {
             ctx.status(HttpStatus.UNPROCESSABLE_CONTENT).render("index.jte", Map.of(
                     "flash", "Некорректный URL",
                     "flashType", "danger"
@@ -37,6 +41,7 @@ public final class UrlController {
         var flash = existingUrl.isPresent() ? "Страница уже существует" : "Страница успешно добавлена";
 
         ctx.sessionAttribute("flash", flash);
+        ctx.sessionAttribute("flashType", existingUrl.isPresent() ? "info" : "success");
         ctx.redirect("/urls/" + url.getId());
     }
 
@@ -48,9 +53,10 @@ public final class UrlController {
 
     public static void show(Context ctx) {
         var id = ctx.pathParamAsClass("id", Long.class).get();
-        var url = findUrl(ctx, id);
+        var url = UrlRepository.find(id);
 
         if (url.isEmpty()) {
+            ctx.status(HttpStatus.NOT_FOUND);
             return;
         }
 
@@ -62,9 +68,10 @@ public final class UrlController {
 
     public static void check(Context ctx) {
         var id = ctx.pathParamAsClass("id", Long.class).get();
-        var url = findUrl(ctx, id);
+        var url = UrlRepository.find(id);
 
         if (url.isEmpty()) {
+            ctx.status(HttpStatus.NOT_FOUND);
             return;
         }
 
@@ -73,7 +80,8 @@ public final class UrlController {
             var statusCode = response.getStatus();
 
             if (statusCode >= 400) {
-                setCheckErrorFlash(ctx);
+                ctx.sessionAttribute("flash", "Произошла ошибка при проверке");
+                ctx.sessionAttribute("flashType", "danger");
                 ctx.redirect("/urls/" + id);
                 return;
             }
@@ -90,8 +98,10 @@ public final class UrlController {
                     description == null ? "" : description.attr("content")
             ));
             ctx.sessionAttribute("flash", "Страница успешно проверена");
+            ctx.sessionAttribute("flashType", "success");
         } catch (Exception exception) {
-            setCheckErrorFlash(ctx);
+            ctx.sessionAttribute("flash", "Произошла ошибка при проверке");
+            ctx.sessionAttribute("flashType", "danger");
         }
 
         ctx.redirect("/urls/" + id);
@@ -99,48 +109,17 @@ public final class UrlController {
 
     public static Map<String, Object> getModelWithFlash(Context ctx) {
         var model = new HashMap<String, Object>();
-        var flash = getFlash(ctx);
+        var flash = ctx.<String>sessionAttribute("flash");
+        var flashType = ctx.<String>sessionAttribute("flashType");
+        ctx.sessionAttribute("flash", null);
+        ctx.sessionAttribute("flashType", null);
 
         if (flash != null && !flash.isBlank()) {
             model.put("flash", flash);
-            model.put("flashType", flash.contains("ошибка") || flash.contains("Некорректный") ? "danger" : "success");
+            model.put("flashType", flashType == null ? "info" : flashType);
         }
 
         return model;
-    }
-
-    private static Optional<Url> findUrl(Context ctx, Long id) {
-        var url = UrlRepository.find(id);
-
-        if (url.isEmpty()) {
-            ctx.status(HttpStatus.NOT_FOUND);
-        }
-
-        return url;
-    }
-
-    private static void setCheckErrorFlash(Context ctx) {
-        ctx.sessionAttribute("flash", "Произошла ошибка при проверке");
-    }
-
-    private static String getFlash(Context ctx) {
-        var flash = ctx.<String>sessionAttribute("flash");
-        ctx.sessionAttribute("flash", null);
-
-        return flash;
-    }
-
-    private static URL parseUrl(String inputUrl) {
-        try {
-            var parsedUrl = URI.create(inputUrl).toURL();
-            if (parsedUrl.getProtocol() == null || parsedUrl.getHost() == null || parsedUrl.getHost().isBlank()) {
-                return null;
-            }
-
-            return parsedUrl;
-        } catch (Exception exception) {
-            return null;
-        }
     }
 
     private static String normalizeUrl(URL parsedUrl) {
